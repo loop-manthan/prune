@@ -21,3 +21,25 @@ Interactive dashboard with keyboard controls:
 - **← →**: Navigate between views
 - **q**: Quit
 
+## VHS Demo (Charm)
+
+This repository includes a Charm VHS tape to record an animated terminal demo of Prune.
+
+Tape file:
+- `vhs/prune.tape`
+
+Requirements:
+- `ffmpeg`
+- `vhs` (https://github.com/charmbracelet/vhs)
+
+Generate the GIF:
+
+```bash
+vhs vhs/prune.tape
+```
+
+Output:
+- `vhs/prune.gif`
+
+If you want to customize the walkthrough timing, theme, or viewport size, edit `vhs/prune.tape` and re-run the same command.
+
