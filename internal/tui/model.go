@@ -8,9 +8,9 @@ import (
 // MetricsCollector tracks telemetry and compression performance.
 type MetricsCollector struct {
 	// Sample counts
-	TotalSamples     int64
-	CRCFailures      int64
-	CRCSuccesses     int64
+	TotalSamples int64
+	CRCFailures  int64
+	CRCSuccesses int64
 
 	// Compression metrics
 	TotalJSONBytes   int64
@@ -24,26 +24,31 @@ type MetricsCollector struct {
 	}
 
 	// Latest sensor values (real-time data)
-	LatestBattery float64
+	LatestBattery  float64
 	LatestAltitude float64
-	LatestIMU     [3]float64 // [x, y, z]
+	LatestIMU      [3]float64 // [x, y, z]
 
 	// Latest quantized values (for display)
-	LatestBatteryQ float64
+	LatestBatteryQ  float64
 	LatestAltitudeQ float64
-	LatestIMUQ     [3]float64
+	LatestIMUQ      [3]float64
 
 	// Latency tracking (in microseconds)
-	LastEncodeLatency     int64 // us
-	LastDecodeLatency     int64 // us
-	LastRoundtripLatency  int64 // us
-	AvgEncodeLatency      float64
-	AvgDecodeLatency      float64
-	AvgRoundtripLatency   float64
+	LastEncodeLatency    int64 // us
+	LastDecodeLatency    int64 // us
+	LastRoundtripLatency int64 // us
+	AvgEncodeLatency     float64
+	AvgDecodeLatency     float64
+	AvgRoundtripLatency  float64
 
 	// Bitstream visualization
 	RecentBitstrings []string // ring buffer of last N bitstrings
 	MaxBitstrings    int
+
+	// History for visualization
+	AltitudeHistory []float64 // rolling window of altitude values
+	BatteryHistory  []float64 // rolling window of battery values
+	MaxHistory      int
 }
 
 // NewMetricsCollector creates a metrics tracker.
@@ -51,6 +56,9 @@ func NewMetricsCollector() *MetricsCollector {
 	return &MetricsCollector{
 		RecentBitstrings: make([]string, 0, 20),
 		MaxBitstrings:    20,
+		AltitudeHistory:  make([]float64, 0, 60),
+		BatteryHistory:   make([]float64, 0, 60),
+		MaxHistory:       60,
 	}
 }
 
@@ -109,6 +117,17 @@ func (m *MetricsCollector) RecordSample(
 		m.RecentBitstrings = m.RecentBitstrings[1:]
 	}
 	m.RecentBitstrings = append(m.RecentBitstrings, bitstring)
+
+	// Add to history
+	if len(m.AltitudeHistory) >= m.MaxHistory {
+		m.AltitudeHistory = m.AltitudeHistory[1:]
+	}
+	m.AltitudeHistory = append(m.AltitudeHistory, m.LatestAltitude)
+
+	if len(m.BatteryHistory) >= m.MaxHistory {
+		m.BatteryHistory = m.BatteryHistory[1:]
+	}
+	m.BatteryHistory = append(m.BatteryHistory, m.LatestBattery)
 }
 
 // CompressionRatio returns JSON bytes / packed bytes.
@@ -147,51 +166,24 @@ func (m *MetricsCollector) RMSE() [5]float64 {
 	return rmse
 }
 
-// ChannelNames returns the channel labels for display.
-func ChannelNames() [5]string {
-	return [5]string{"Battery", "Altitude", "IMU-X", "IMU-Y", "IMU-Z"}
-}
-
-// ViewMode represents which screen to display.
-type ViewMode int
-
-const (
-	ViewCompression ViewMode = iota
-	ViewErrors
-	ViewLatency
-	ViewCRC
-	ViewBitstream
-	ViewStats
-)
-
 // TUIModel is the Bubble Tea state for the dashboard.
 type TUIModel struct {
 	Metrics     *MetricsCollector
+	SourceName  string
 	Width       int
 	Height      int
 	Tick        int64
 	StartTime   time.Time
 	RunningTime time.Duration
-	CurrentView ViewMode
 }
 
 // NewModel creates the initial TUI model.
-func NewModel(width, height int) *TUIModel {
+func NewModel(width, height int, sourceName string) *TUIModel {
 	return &TUIModel{
-		Metrics:     NewMetricsCollector(),
-		Width:       width,
-		Height:      height,
-		StartTime:   time.Now(),
-		CurrentView: ViewCompression,
+		Metrics:    NewMetricsCollector(),
+		SourceName: sourceName,
+		Width:      width,
+		Height:     height,
+		StartTime:  time.Now(),
 	}
-}
-
-// NextView cycles to the next view mode.
-func (m *TUIModel) NextView() {
-	m.CurrentView = (m.CurrentView + 1) % 6
-}
-
-// PrevView cycles to the previous view mode.
-func (m *TUIModel) PrevView() {
-	m.CurrentView = (m.CurrentView - 1 + 6) % 6
 }

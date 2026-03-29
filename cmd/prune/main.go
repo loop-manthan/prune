@@ -2,26 +2,44 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"math"
 	"os"
-	"sync"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"prune/internal/engine"
 	"prune/internal/simulator"
+	"prune/internal/source"
 	"prune/internal/tui"
 )
 
 func main() {
-	model := tui.NewModel(120, 40)
+	var sourceName string
+	var seed int64
+	var apiPoll time.Duration
 
-	// Initialize simulator and pipeline
-	ctrl := simulator.NewController(42) // deterministic seed for reproducibility
+	flag.StringVar(&sourceName, "source", "simulator", "telemetry source: simulator|opensky")
+	flag.Int64Var(&seed, "seed", 42, "seed for simulator source (0 = random)")
+	flag.DurationVar(&apiPoll, "api-poll", time.Second, "poll interval for API sources")
+	flag.Parse()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	src := buildSource(sourceName, seed, apiPoll)
+	if err := src.Start(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "source %q unavailable (%v); falling back to simulator\n", src.Name(), err)
+		src = source.NewSimulatorSource(seed)
+		if err := src.Start(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to start fallback source: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	model := tui.NewModel(120, 40, src.Name())
 
 	codec := engine.NewFrameCodec()
 	priorState := &struct {
@@ -32,12 +50,8 @@ func main() {
 		IMUQ:      [3]uint32{0, 0, 0},
 	}
 
-	var stateMu sync.Mutex
-
-	ctrl.Start(ctx)
-
 	// Start sample processor in background
-	go processSamples(model, ctrl, codec, priorState, &stateMu)
+	go processSamples(model, src.Samples(), codec, priorState)
 
 	// Start Bubble Tea app
 	p := tea.NewProgram(model)
@@ -49,29 +63,37 @@ func main() {
 	cancel()
 }
 
+func buildSource(name string, seed int64, pollEvery time.Duration) source.Source {
+	switch name {
+	case "opensky":
+		return source.NewOpenSkySource(pollEvery)
+	default:
+		return source.NewSimulatorSource(seed)
+	}
+}
+
 func processSamples(
 	model *tui.TUIModel,
-	ctrl *simulator.Controller,
+	samples <-chan simulator.SensorSample,
 	codec *engine.FrameCodec,
 	priorState *struct {
 		AltitudeQ uint32
 		IMUQ      [3]uint32
 	},
-	stateMu *sync.Mutex,
 ) {
-	for sample := range ctrl.Samples() {
+	for sample := range samples {
 		rawInput := struct {
-			Battery   float64
-			Altitude  float64
-			IMU       [3]float64
-			Flags     uint8
-			Sequence  uint16
+			Battery  float64
+			Altitude float64
+			IMU      [3]float64
+			Flags    uint8
+			Sequence uint16
 		}{
-			Battery:   sample.Battery,
-			Altitude:  sample.Altitude,
-			IMU:       sample.IMU,
-			Flags:     sample.Flags,
-			Sequence:  sample.SequenceNum & 0xFFF,
+			Battery:  sample.Battery,
+			Altitude: sample.Altitude,
+			IMU:      sample.IMU,
+			Flags:    sample.Flags,
+			Sequence: sample.SequenceNum & 0xFFF,
 		}
 
 		// Measure encode latency
@@ -131,10 +153,8 @@ func processSamples(
 		}
 
 		// Update prior state
-		stateMu.Lock()
 		priorState.AltitudeQ = qvals.AltitudeQ
 		priorState.IMUQ = qvals.IMUQ
-		stateMu.Unlock()
 
 		// Prepare raw and quantized sensor arrays for display
 		rawSensors := [5]float64{
@@ -162,10 +182,9 @@ func processSamples(
 			packedSize,
 			errors,
 			bitstring,
-			err == nil,
+			true,
 			rawSensors,
 			quantSensors,
 		)
 	}
 }
-

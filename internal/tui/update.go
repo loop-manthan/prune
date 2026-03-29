@@ -6,7 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Message types for Bubble Tea
+// TickMsg is emitted every refresh cycle.
 type TickMsg struct {
 	Time time.Time
 }
@@ -27,22 +27,6 @@ func (m *TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
-		case "right", "l", "n":
-			m.NextView()
-		case "left", "h", "p":
-			m.PrevView()
-		case "1":
-			m.CurrentView = ViewCompression
-		case "2":
-			m.CurrentView = ViewErrors
-		case "3":
-			m.CurrentView = ViewLatency
-		case "4":
-			m.CurrentView = ViewCRC
-		case "5":
-			m.CurrentView = ViewBitstream
-		case "6":
-			m.CurrentView = ViewStats
 		}
 
 	case TickMsg:
@@ -59,10 +43,8 @@ func (m *TUIModel) View() string {
 	return m.Render()
 }
 
-// getTick returns a command that sends a TickMsg after 100ms.
 func getTick() tea.Cmd {
 	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
 		return TickMsg{Time: t}
 	})
 }
-
