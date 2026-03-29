@@ -1,0 +1,42 @@
+# Go binaries
+/prune
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go build outputs
+/cmd/prune/prune
+
+# Go module cache
+/vendor/
+
+# Go test cache
+.testcache
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS-specific
+Thumbs.db
+
+# Large binary installers
+go*.linux-amd64.tar.gz
+go*.linux-arm64.tar.gz
+go*.darwin-amd64.tar.gz
+go*.darwin-arm64.tar.gz
+go*.windows-*.zip
+
+# VHS/demo outputs
+# (Keep .tape scripts but ignore generated assets)
+vhs/*.gif
+vhs/*.mp4
+
+# Temporary files
+*.tmp
+*.log
